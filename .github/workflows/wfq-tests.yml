@@ -1,0 +1,47 @@
+name: WFQ scheduler tests
+
+on:
+  push:
+    branches: [wfq-scheduler]
+    paths:
+      - "vllm/v1/core/sched/**"
+      - "vllm/config/scheduler.py"
+      - "vllm/v1/request.py"
+      - "tests/v1/core/**wfq**"
+      - ".github/workflows/wfq-tests.yml"
+  workflow_dispatch: {}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Ruff check (WFQ files)
+        run: |
+          uvx ruff check \
+            vllm/v1/core/sched/wfq_queue.py \
+            vllm/v1/core/sched/request_queue.py \
+            tests/v1/core/test_wfq_scheduler.py \
+            tests/v1/core/test_wfq_integration.py
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install vLLM (python-only, no compiled extensions)
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements/build.txt
+          VLLM_TARGET_DEVICE=empty pip install -e . --no-build-isolation
+          pip install pytest
+      - name: Run WFQ unit + integration tests
+        # --noconftest: the repo-root tests/conftest.py pulls heavy test-only
+        # deps; these scheduler tests are self-contained (no fixtures).
+        run: |
+          pytest --noconftest tests/v1/core/test_wfq_scheduler.py \
+                 tests/v1/core/test_wfq_integration.py -q
